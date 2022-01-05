@@ -1,7 +1,9 @@
 import sys
 sys.path.append(".")
-sys.path.append("../")
+sys.path.append("..")
 sys.path.append("../..")
+sys.path.append('..')
+sys.path.append('./torchrl')
 import torch
 
 import os
@@ -117,10 +119,10 @@ def experiment(args):
     epochs = params['general_setting']['pretrain_epochs'] + \
         params['general_setting']['num_epochs']
 
-    print(env.action_space,env.reset())
-    print(env.observation_space)
-    for i in range(10):
-        print(env.reset())
+    # print(env.action_space)
+    # print(env.observation_space)
+    # for i in range(10):
+    #     print(env.reset_with_index(0))
     params['general_setting']['collector'] = AsyncMultiTaskParallelCollectorUniform(
         env=env, pf=pf, replay_buffer=replay_buffer,
         env_cls = cls_dicts, env_args = [params["env"], cls_args, params["meta_env"]],

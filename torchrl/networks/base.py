@@ -2,7 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-import torchrl.networks.init as init
+import sys
+sys.path.append('..')
+import networks.init as init
 
 class MLPBase(nn.Module):
     def __init__(self, input_shape, hidden_shapes, activation_func=F.relu, init_func = init.basic_init, last_activation_func = None ):

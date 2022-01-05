@@ -5,15 +5,22 @@
         "obs_norm":false
     },
     "meta_env":{
-        "obs_type": "with_goal_and_id",
+        "obs_type": "with_goal",
         "random_init": true
     },
     "replay_buffer":{
         "size": 1e6
     },
     "net":{ 
-        "hidden_shapes": [400,400],
-        "append_hidden_shapes":[400]
+        "hidden_shapes": [400, 400],
+        "em_hidden_shapes": [400],
+        "num_layers": 2,
+        "num_modules": 2,
+        "module_hidden": 256,
+        "num_gating_layers": 2,
+        "gating_hidden": 256,
+        "add_bn": false,
+        "pre_softmax": false
     },
     "general_setting": {
         "discount" : 0.99,
@@ -30,7 +37,7 @@
         "tau" : 0.005,
         "opt_times" : 200,
 
-        "eval_episodes" : 5
+        "eval_episodes" : 3
     },
     "sac":{
         
@@ -39,6 +46,7 @@
         
         "reparameterization": true,
         "automatic_entropy_tuning": true,
+        "temp_reweight": true,
         "policy_std_reg_weight": 0,
         "policy_mean_reg_weight": 0
     }

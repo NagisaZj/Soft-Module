@@ -132,6 +132,8 @@ class AsyncMultiTaskParallelCollectorUniform(AsyncSingleTaskParallelCollector):
             self.tasks_mapping[task_name] = idx
         self.tasks_progress = [0 for _ in range(len(self.tasks))]
         self.progress_alpha = progress_alpha
+        self.task_goals = [[]*50]
+        self.goal_successes = [[]*50]
 
     @classmethod
     def take_actions(cls, funcs, env_info, ob_info, replay_buffer):
@@ -139,6 +141,12 @@ class AsyncMultiTaskParallelCollectorUniform(AsyncSingleTaskParallelCollector):
         pf = funcs["pf"]
         ob = ob_info["ob"]
         task_idx = env_info.env_rank
+        if np.random.rand()>0.5 and cls.task_goals[task_idx] !=[]:
+            for i in range(len(cls.goal_successes[task_idx])):
+                if cls.goal_successes[task_idx][i]>0:
+                    ob[-3:] = cls.task_goals[task_idx][i]
+                    print(task_idx,i)
+                    break
         idx_flag = isinstance(pf, policies.MultiHeadGuassianContPolicy)
 
         embedding_flag = isinstance(pf, policies.EmbeddingGuassianContPolicyBase)
@@ -297,7 +305,10 @@ class AsyncMultiTaskParallelCollectorUniform(AsyncSingleTaskParallelCollector):
                 shared_que.put({
                     'eval_rewards': None,
                     'success_rate': None,
-                    'task_name': task_name
+                    'task_name': task_name,
+                    'eval_successes': None,
+                    'eval_goals': None,
+                    'task_idx':None
                 })
                 continue
             if current_epoch > epochs:
@@ -315,7 +326,9 @@ class AsyncMultiTaskParallelCollectorUniform(AsyncSingleTaskParallelCollector):
                 #     "obs_var": env_info.env._obs_var
                 # }
 
-            eval_rews = []  
+            eval_rews = []
+            eval_successes = []
+            eval_goals = []
 
             done = False
             success = 0
@@ -358,11 +371,16 @@ class AsyncMultiTaskParallelCollectorUniform(AsyncSingleTaskParallelCollector):
                 eval_rews.append(rew)
                 done = False
                 success += current_success
+                eval_successes.append(current_success)
+                eval_goals.append(eval_ob[-3:])
 
             shared_que.put({
                 'eval_rewards': eval_rews,
                 'success_rate': success / env_info.eval_episodes,
-                'task_name': task_name
+                'task_name': task_name,
+                'eval_successes': eval_successes,
+                'eval_goals': eval_goals,
+                'task_idx':task_idx
             })
 
     def start_worker(self):
@@ -477,6 +495,8 @@ class AsyncMultiTaskParallelCollectorUniform(AsyncSingleTaskParallelCollector):
                 eval_rews += worker_rst["eval_rewards"]
                 mean_success_rate += worker_rst["success_rate"]
                 tasks_result.append((worker_rst["task_name"], worker_rst["success_rate"], np.mean(worker_rst["eval_rewards"])))
+                self.task_goals[worker_rst['task_idx']] = worker_rst["eval_goals"]
+                self.goal_successes[worker_rst['task_idx']] = worker_rst["eval_successes"]
 
         tasks_result.sort()
 

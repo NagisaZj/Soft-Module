@@ -4,7 +4,10 @@ import math
 
 import torch
 
-from torchrl.algo.rl_algo import RLAlgo
+import sys
+sys.path.append('../../..')
+sys.path.append('../..')
+from algo.rl_algo import RLAlgo
 
 class OffRLAlgo(RLAlgo):
     """

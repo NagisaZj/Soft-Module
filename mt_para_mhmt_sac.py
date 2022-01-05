@@ -1,7 +1,7 @@
 import sys
-sys.path.append(".")
-sys.path.append("../")
-sys.path.append("../..")
+# import sys
+sys.path.append(".") 
+sys.path.append('./torchrl')
 import torch
 
 import os
@@ -25,6 +25,7 @@ from torchrl.algo import SAC
 from torchrl.algo import TwinSAC
 from torchrl.algo import TwinSACQ
 from torchrl.algo import MTSAC
+from torchrl.algo import MTMHSAC
 from torchrl.collector.para import ParallelCollector
 from torchrl.collector.para import AsyncParallelCollector
 from torchrl.collector.para.mt import SingleTaskParallelCollectorBase
@@ -37,8 +38,6 @@ import gym
 
 from metaworld_utils.meta_env import get_meta_env
 
-import random
-
 def experiment(args):
 
     device = torch.device("cuda:{}".format(args.device) if args.cuda else "cpu")
@@ -48,7 +47,6 @@ def experiment(args):
     env.seed(args.seed)
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    random.seed(args.seed)
     if args.cuda:
         torch.backends.cudnn.deterministic=True
     
@@ -67,47 +65,32 @@ def experiment(args):
     import torch.multiprocessing as mp
     mp.set_start_method('spawn', force=True)
 
-    from torchrl.networks.init import normal_init
-
-    example_ob = env.reset()
-    example_embedding = env.active_task_one_hot
-
-    pf = policies.ModularGuassianGatedCascadeCondContPolicy(
-        input_shape=env.observation_space.shape[0],
-        em_input_shape=np.prod(example_embedding.shape),
-        output_shape=2 * env.action_space.shape[0],
-        **params['net'])
-
-    if args.pf_snap is not None:
-        pf.load_state_dict(torch.load(args.pf_snap, map_location='cpu'))
-
-    qf1 = networks.FlattenModularGatedCascadeCondNet(
-        input_shape=env.observation_space.shape[0] + env.action_space.shape[0],
-        em_input_shape=np.prod(example_embedding.shape),
-        output_shape=1,
-        **params['net'])
-    qf2 = networks.FlattenModularGatedCascadeCondNet( 
-        input_shape=env.observation_space.shape[0] + env.action_space.shape[0],
-        em_input_shape=np.prod(example_embedding.shape),
-        output_shape=1,
-        **params['net'])
-
-    if args.qf1_snap is not None:
-        qf1.load_state_dict(torch.load(args.qf2_snap, map_location='cpu'))
-    if args.qf2_snap is not None:
-        qf2.load_state_dict(torch.load(args.qf2_snap, map_location='cpu'))
+    pf = policies.MultiHeadGuassianContPolicy (
+        input_shape = env.observation_space.shape[0], 
+        output_shape = 2 * env.action_space.shape[0],
+        head_num=env.num_tasks,
+        **params['net'] )
+    qf1 = networks.FlattenBootstrappedNet( 
+        input_shape = env.observation_space.shape[0] + env.action_space.shape[0],
+        output_shape = 1,
+        head_num=env.num_tasks,
+        **params['net'] )
+    qf2 = networks.FlattenBootstrappedNet( 
+        input_shape = env.observation_space.shape[0] + env.action_space.shape[0],
+        output_shape = 1,
+        head_num=env.num_tasks,
+        **params['net'] )
     
+    example_ob = env.reset()
     example_dict = { 
         "obs": example_ob,
         "next_obs": example_ob,
         "acts": env.action_space.sample(),
         "rewards": [0],
         "terminals": [False],
-        "task_idxs": [0],
-        "embedding_inputs": example_embedding
+        "task_idxs": [0]
     }
-
-    replay_buffer = AsyncSharedReplayBuffer(int(buffer_param['size']),
+    replay_buffer = AsyncSharedReplayBuffer( int(buffer_param['size']),
             args.worker_nums
     )
     replay_buffer.build_by_example(example_dict)
@@ -117,10 +100,6 @@ def experiment(args):
     epochs = params['general_setting']['pretrain_epochs'] + \
         params['general_setting']['num_epochs']
 
-    print(env.action_space,env.reset())
-    print(env.observation_space)
-    for i in range(10):
-        print(env.reset())
     params['general_setting']['collector'] = AsyncMultiTaskParallelCollectorUniform(
         env=env, pf=pf, replay_buffer=replay_buffer,
         env_cls = cls_dicts, env_args = [params["env"], cls_args, params["meta_env"]],
@@ -134,6 +113,7 @@ def experiment(args):
     )
     params['general_setting']['batch_size'] = int(params['general_setting']['batch_size'])
     params['general_setting']['save_dir'] = osp.join(logger.work_dir,"model")
+    # agent = MTMHSAC(
     agent = MTSAC(
         pf = pf,
         qf1 = qf1,
