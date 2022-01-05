@@ -125,6 +125,8 @@ class AsyncSingleTaskParallelCollector(AsyncParallelCollector):
 class AsyncMultiTaskParallelCollectorUniform(AsyncSingleTaskParallelCollector):
 
     def __init__(self, progress_alpha=0.1, **kwargs):
+        self.task_goals = [None]*50
+        self.goal_successes = [None]*50
         super().__init__(**kwargs)
         self.tasks = list(self.env_cls.keys())
         self.tasks_mapping = {}
@@ -132,19 +134,18 @@ class AsyncMultiTaskParallelCollectorUniform(AsyncSingleTaskParallelCollector):
             self.tasks_mapping[task_name] = idx
         self.tasks_progress = [0 for _ in range(len(self.tasks))]
         self.progress_alpha = progress_alpha
-        self.task_goals = [[]*50]
-        self.goal_successes = [[]*50]
 
     @classmethod
-    def take_actions(cls, funcs, env_info, ob_info, replay_buffer):
+    def take_actions(cls, funcs, env_info, ob_info, replay_buffer,goal_successes,task_goals):
 
         pf = funcs["pf"]
         ob = ob_info["ob"]
         task_idx = env_info.env_rank
-        if np.random.rand()>0.5 and cls.task_goals[task_idx] !=[]:
-            for i in range(len(cls.goal_successes[task_idx])):
-                if cls.goal_successes[task_idx][i]>0:
-                    ob[-3:] = cls.task_goals[task_idx][i]
+        if np.random.rand()>0.5 and task_goals[task_idx] !=None:
+            print(goal_successes[task_idx])
+            for i in range(len(goal_successes[task_idx])):
+                if goal_successes[task_idx][i]>0:
+                    ob[-3:] = task_goals[task_idx][i]
                     print(task_idx,i)
                     break
         idx_flag = isinstance(pf, policies.MultiHeadGuassianContPolicy)
@@ -218,7 +219,7 @@ class AsyncMultiTaskParallelCollectorUniform(AsyncSingleTaskParallelCollector):
     @staticmethod
     def train_worker_process(cls, shared_funcs, env_info,
         replay_buffer, shared_que,
-        start_barrier, epochs, start_epoch, task_name, shared_dict):
+        start_barrier, epochs, start_epoch, task_name, shared_dict,goal_successes,task_goals):
 
         replay_buffer.rebuild_from_tag()
         local_funcs = copy.deepcopy(shared_funcs)
@@ -262,7 +263,7 @@ class AsyncMultiTaskParallelCollectorUniform(AsyncSingleTaskParallelCollector):
 
             for _ in range(env_info.epoch_frames):
                 # print(env_info.epoch_frames)
-                next_ob, done, reward, _ = cls.take_actions(local_funcs, env_info, c_ob, replay_buffer )
+                next_ob, done, reward, _ = cls.take_actions(local_funcs, env_info, c_ob, replay_buffer,goal_successes,task_goals )
                 c_ob["ob"] = next_ob
                 train_rew += reward
                 train_epoch_reward += reward
@@ -433,7 +434,7 @@ class AsyncMultiTaskParallelCollectorUniform(AsyncSingleTaskParallelCollector):
                 args=( self.__class__, self.shared_funcs,
                     self.env_info, self.replay_buffer, 
                     self.shared_que, self.start_barrier,
-                    self.train_epochs, start_epoch, task, self.shared_dict))
+                    self.train_epochs, start_epoch, task, self.shared_dict,self.goal_successes,self.task_goals))
             p.start()
             self.workers.append(p)
             # i += 1

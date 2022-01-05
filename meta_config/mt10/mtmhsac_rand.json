@@ -30,7 +30,7 @@
         "tau" : 0.005,
         "opt_times" : 200,
 
-        "eval_episodes" : 5
+        "eval_episodes" : 10
     },
     "sac":{
         
